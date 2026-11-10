@@ -906,7 +906,7 @@ body.solo #phase .side.red .choices.long .choice{min-height:46px;justify-content
         <div class="wheel-box">
           <div class="wheel-pointer"></div>
           <canvas id="wheel" width="640" height="640"></canvas>
-          <div class="wheel-hub" id="wheelHub">타격<br>돌림판</div>
+          <div class="wheel-hub" id="wheelHub">스윙<br>돌림판</div>
         </div>
       </div>
       <div class="action" id="action" hidden>
@@ -1028,7 +1028,7 @@ body.solo #phase .side.red .choices.long .choice{min-height:46px;justify-content
             <li><b class="ui">⚾ 던지기</b> 바늘을 가운데에 맞춰요<small>선생님 화면에는 학생이 멈춘 자리가 그대로 보여요</small></li>
             <li><b class="ui">🏏 스윙하기</b> 바늘을 가운데에 맞춰요<small>공이 스트라이크인지 볼인지 모르는 채로 쳐요 · 게이지는 10초 안에</small></li>
             <li>액션 모드 → 결과 공개</li>
-            <li>맞히면 <b class="ui">돌림판</b>이 안타 · 홈런을 정해요</li>
+            <li>스윙하면 바로 <b class="ui">돌림판</b>이 헛스윙 · 아웃 · 안타 · 홈런을 정해요</li>
           </ol>
         </article>
       </div>
@@ -1529,7 +1529,7 @@ function startGame(){
   const gid=S.gameId=(S.gameId||0)+1;
   S.phase='intro'; S.busy=true; renderTop(); hideBall();
   clearTimeout(S.introT); clearTimeout(S.introT2);
-  S.introT2=setTimeout(()=>{ if(S.gameId===gid){ banner('경기 시작!', `1회 초 · ${T(0).name} 공격`, '#ffe08a', true); sfx('start'); } },700);
+  S.introT2=setTimeout(()=>{ if(S.gameId===gid){ banner('경기 시작!', `1회 초 · ${T(0).name} 공격`, '#ffe08a', true); playSfx('start'); } },700);
   S.introT=setTimeout(()=>{ if(S.gameId!==gid || S.over) return; S.busy=false; newPitch(); },3900);
 }
 $('#newBtn').addEventListener('click', () => S.solo ? openDiff() : go('teachScr'));
@@ -1896,7 +1896,7 @@ async function remoteAct(kind,t,p,auto){
   const who = kind==='throw' ? `투수 ${pitcher()}` : `타자 ${batter()}`;
   freezeGauge(p,t,who); beep('mitt');
   log(`${who} ${auto?'시간이 지나 자동으로 ':'기기에서 '}${kind==='throw'?'던졌어요':'스윙했어요'} (${timingWord(t)})`);
-  await sleep(1500);
+  await sleep(kind==='swing'?450:1500);
   S.actLock=false;
   if(kind==='throw'){ if(S.phase==='pitch') doThrow(t); } else if(S.phase==='swing') doSwing(t);
 }
@@ -1980,9 +1980,14 @@ async function playPitch(swing, t){
       pw:{ def:S.power.def||0, off:S.power.off||0 }, snap:snapshot() });
   }
   const strike=S.pitch.strike;
-  let contact=false, chaseMiss=false;
-  if(swing && t>0){ if(strike || rnd()<.55) contact=true; else chaseMiss=true; }
-  $('#phase').innerHTML=`<div class="callout"><strong>${swing?'스윙!':'지켜보기'}</strong><br>액션 모드 재생 중…</div>`;
+  let contact=false, chaseMiss=false, res=null;
+  if(swing){
+    // 스윙하자마자 돌림판: 헛스윙까지 포함해 결과를 먼저 정하고, 그다음 장면을 재생해요
+    $('#phase').innerHTML=`<div class="callout"><strong>스윙! ${timingWord(t)}</strong><br>돌림판이 결과를 정해요…</div>`;
+    res = await spinWheel(swingSegments(t, strike));
+    contact = res!=='헛스윙'; chaseMiss = !contact && !strike;
+  }
+  $('#phase').innerHTML=`<div class="callout"><strong>${swing?(contact?`${res}!`:'헛스윙!'):'지켜보기'}</strong><br>액션 모드 재생 중…</div>`;
   await actionMode(swing, contact);
 
   const P=S.F.P, C=S.F.C, B=S.bat;
@@ -1997,8 +2002,8 @@ async function playPitch(swing, t){
     await flyBall(R, CONTACT, 520, 22);
     beep('hit'); floatText([CONTACT[0]+30,CONTACT[1]-30],'딱!','#3b2d20');
     await sleep(260);
-    $('#phase').innerHTML=`<div class="callout"><strong>딱! ${timingWord(t)}${strike?'':' (볼을 받아쳤어요)'}</strong><br>돌림판이 결과를 정해요…</div>`;
-    return spinWheel(t, !strike);
+    $('#phase').innerHTML=`<div class="callout"><strong>딱! ${timingWord(t)}${strike?'':' (볼을 받아쳤어요)'}</strong><br>${res}!</div>`;
+    return resolveHit(res);
   }
   await flyBall(R, M, 560, 22);
   C.pose='crouchCatch'; beep('mitt'); hideBall();
@@ -2024,7 +2029,7 @@ async function playPitch(swing, t){
 }
 
 /* ---------- 4. 돌림판 ---------- */
-const SEG_STYLE={ '아웃':'#9b8a74','파울':'#e6d3a6','안타':'#6fae4c','2루타':'#4d86c9','3루타':'#8b6bc2','홈런':'#e2563f' };
+const SEG_STYLE={ '헛스윙':'#56657a', '아웃':'#9b8a74','파울':'#e6d3a6','안타':'#6fae4c','2루타':'#4d86c9','3루타':'#8b6bc2','홈런':'#e2563f' };
 function wheelSegments(t, chase){
   const O=S.power.off;
   const w={
@@ -2035,6 +2040,14 @@ function wheelSegments(t, chase){
   const total=Object.values(w).reduce((a,b)=>a+Math.max(.5,b),0);
   const order=['아웃','안타','파울','2루타','아웃','3루타','안타','홈런'];
   return order.map(name=>({ name, w:Math.max(.5,w[name])/total/order.filter(n=>n===name).length }));
+}
+// 스윙 돌림판: 헛스윙 칸 + 타구 결과 칸
+// 헛스윙 확률: 빨강에서 스윙 70%, 볼에 스윙 45%, 스트라이크에 스윙 0%
+function swingSegments(t, strike){
+  const miss = t<=0 ? .7 : strike ? 0 : .45;
+  const segs = wheelSegments(Math.max(t,0), !strike).map(x=>({ name:x.name, w:x.w*(1-miss) }));
+  if(miss>0) segs.splice(2, 0, { name:'헛스윙', w:miss });
+  return segs;
 }
 function drawWheel(segs){
   const c=$('#wheel'), x=c.getContext('2d'), R=c.width/2;
@@ -2058,15 +2071,15 @@ function sizeWheel(){
   box.style.width=Math.max(160,Math.round(s))+'px'; box.style.maxWidth='none'; box.style.marginTop='24px';
   const hub=$('#wheelHub'); if(hub) hub.style.fontSize=Math.max(13,Math.round(s*0.055))+'px';
 }
-async function spinWheel(t, chase){
+async function spinWheel(segs){
   S.phase='wheel'; setStep('wheel');
-  const segs=wheelSegments(t,chase); drawWheel(segs);
+  drawWheel(segs);
   let r=rnd(), pick=segs[segs.length-1];
   for(const s of segs){ if(r<s.w){pick=s;break} r-=s.w; }
   const theta=(pick.a0+(pick.a1-pick.a0)*(.15+rnd()*.7))*180/Math.PI;
   const final=360*6-theta;
   const c=$('#wheel'); c.style.transform='rotate(0deg)';
-  $('#wheelHub').innerHTML='타격<br>돌림판';
+  $('#wheelHub').innerHTML='스윙<br>돌림판';
   sizeWheel(); $('#wheelWrap').hidden=false;
   const totals={}; segs.forEach(s=>totals[s.name]=(totals[s.name]||0)+s.w);
   $('#phase').insertAdjacentHTML('beforeend',`<div class="odds">${Object.entries(totals).map(([k,v])=>`<span>${k} ${Math.round(v*100)}%</span>`).join('')}</div>`);
@@ -2076,7 +2089,7 @@ async function spinWheel(t, chase){
   $('#wheelHub').textContent=pick.name;
   await sleep(900);
   $('#wheelWrap').hidden=true;
-  await resolveHit(pick.name);
+  return pick.name;
 }
 
 /* ---------- 결과 처리 (선수 동작 포함) ---------- */
@@ -2139,7 +2152,7 @@ async function resolveHit(res){
     beep('cheer');
     const flight=flyBall(CONTACT, land, 1400, 420, true);
     await sleep(500);
-    S.paHit=true; sfx('homerun'); banner('홈런!!', `${who}의 큼지막한 한 방`, '#ffe08a'); log(`${who} 홈런!`,'score');
+    S.paHit=true; playSfx('homerun'); banner('홈런!!', `${who}의 큼지막한 한 방`, '#ffe08a'); log(`${who} 홈런!`,'score');
     await Promise.all([flight, advance(4,B)]); hideBall();
     return endPA();
   }
@@ -2245,7 +2258,7 @@ async function switchSides(){
   await sleep(2400); newPitch();
 }
 function gameOver(walkoff){
-  if(!S.mirror) sfx('end');
+  if(!S.mirror) playSfx('end');
   S.over=true; S.phase='over'; S.busy=false; stopTimer(); stopGauge(); setStep('');
   if(S.restart){ S.restart=false; return startGame(); }
   if(S.online){ let fin=null; try{ fin=finalData(); }catch(e){} netWrite({status:'over', final:fin}); }
@@ -2357,7 +2370,7 @@ function bgmSync(){
   if(want){ if(a.paused){ a.volume=0; a.play().then(()=>{ MUSIC.playing=true; bgmFade(.55,900); }).catch(()=>{ MUSIC.unlocked=false; }); } else bgmFade(.55,300); }
   else if(!a.paused) bgmFade(0,700,()=>{ a.pause(); MUSIC.playing=false; });
 }
-function sfx(k){
+function playSfx(k){
   const src=SFX_SRC[k]; if(!src || src.startsWith('__') || !S.sound) return;
   try{ const a=new Audio(src); a.volume=.85; a.play().catch(()=>{}); }catch(e){}
 }
@@ -3039,7 +3052,7 @@ function mirrorInit(g){
   const fresh = !g.current && (!sn || (sn.inning===1 && sn.half===0 && sn.outs===0));
   createFielders(def(), fresh);
   applySnap(sn);
-  if(fresh) setTimeout(()=>{ banner('경기 시작!', `1회 초 · ${T(0).name} 공격`, '#ffe08a', true); sfx('start'); },500);
+  if(fresh) setTimeout(()=>{ banner('경기 시작!', `1회 초 · ${T(0).name} 공격`, '#ffe08a', true); playSfx('start'); },500);
   document.body.classList.remove('solo','pop-on'); $('#preBg').classList.remove('on');
   document.body.classList.add('mirror'); $('#stuScr').classList.add('mirror');
   ST.mirror=true; ST.playing=false; ST.pendingPlay=null; ST.pendingSnap=null; ST.lastPlay=null;
@@ -3191,7 +3204,7 @@ function stuRender(){
   $('#stuScr').classList.toggle('paused', paused);
   if(g.status==='playing' || (g.status==='over' && ST.mirror)) mirrorSync(g);
   if(g.status==='playing') ST.endSfx=false;
-  if(g.status==='over' && !ST.endSfx){ ST.endSfx=true; sfx('end'); }
+  if(g.status==='over' && !ST.endSfx){ ST.endSfx=true; playSfx('end'); }
   bgmSync();
   const ti=stuTeam(), chip=$('#stuTeam');
   chip.className='chip '+(ti==null?'':TEAMCLS[ti]); chip.textContent = ti==null ? (g.status==='lobby'?'팀 배정 전':'관전 중') : `${g.teams[ti].name}`;
