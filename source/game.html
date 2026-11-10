@@ -1028,7 +1028,7 @@ body.solo #phase .side.red .choices.long .choice{min-height:46px;justify-content
             <li><b class="ui">⚾ 던지기</b> 바늘을 가운데에 맞춰요<small>선생님 화면에는 학생이 멈춘 자리가 그대로 보여요</small></li>
             <li><b class="ui">🏏 스윙하기</b> 바늘을 가운데에 맞춰요<small>공이 스트라이크인지 볼인지 모르는 채로 쳐요 · 게이지는 10초 안에</small></li>
             <li>액션 모드 → 결과 공개</li>
-            <li>스윙하면 바로 <b class="ui">돌림판</b>이 헛스윙 · 아웃 · 안타 · 홈런을 정해요</li>
+            <li>스트라이크를 맞히면 바로 <b class="ui">돌림판</b>이 아웃 · 안타 · 홈런을 정해요 (볼에 스윙하면 헛스윙이나 파울)</li>
           </ol>
         </article>
       </div>
@@ -1896,7 +1896,7 @@ async function remoteAct(kind,t,p,auto){
   const who = kind==='throw' ? `투수 ${pitcher()}` : `타자 ${batter()}`;
   freezeGauge(p,t,who); beep('mitt');
   log(`${who} ${auto?'시간이 지나 자동으로 ':'기기에서 '}${kind==='throw'?'던졌어요':'스윙했어요'} (${timingWord(t)})`);
-  await sleep(kind==='swing'?450:1500);
+  await sleep(kind==='swing'?1000:1500);
   S.actLock=false;
   if(kind==='throw'){ if(S.phase==='pitch') doThrow(t); } else if(S.phase==='swing') doSwing(t);
 }
@@ -1982,10 +1982,16 @@ async function playPitch(swing, t){
   const strike=S.pitch.strike;
   let contact=false, chaseMiss=false, res=null;
   if(swing){
-    // 스윙하자마자 돌림판: 헛스윙까지 포함해 결과를 먼저 정하고, 그다음 장면을 재생해요
-    $('#phase').innerHTML=`<div class="callout"><strong>스윙! ${timingWord(t)}</strong><br>돌림판이 결과를 정해요…</div>`;
-    res = await spinWheel(swingSegments(t, strike));
-    contact = res!=='헛스윙'; chaseMiss = !contact && !strike;
+    // 헛스윙 확률: 빨강에서 스윙 90%, 볼에 스윙 70%, 스트라이크에 스윙 0%
+    // 스트라이크를 맞히면 스윙하자마자 돌림판, 볼을 건드리면 돌림판 없이 파울
+    const missP = t<=0 ? .9 : strike ? 0 : .7;
+    if(rnd()<missP){ contact=false; chaseMiss=!strike; }
+    else if(!strike){ contact=true; res='파울'; }
+    else {
+      contact=true;
+      $('#phase').innerHTML=`<div class="callout"><strong>스윙! ${timingWord(t)}</strong><br>돌림판이 결과를 정해요…</div>`;
+      res = await spinWheel(wheelSegments(Math.max(t,0), false));
+    }
   }
   $('#phase').innerHTML=`<div class="callout"><strong>${swing?(contact?`${res}!`:'헛스윙!'):'지켜보기'}</strong><br>액션 모드 재생 중…</div>`;
   await actionMode(swing, contact);
@@ -2002,7 +2008,7 @@ async function playPitch(swing, t){
     await flyBall(R, CONTACT, 520, 22);
     beep('hit'); floatText([CONTACT[0]+30,CONTACT[1]-30],'딱!','#3b2d20');
     await sleep(260);
-    $('#phase').innerHTML=`<div class="callout"><strong>딱! ${timingWord(t)}${strike?'':' (볼을 받아쳤어요)'}</strong><br>${res}!</div>`;
+    $('#phase').innerHTML=`<div class="callout"><strong>딱! ${timingWord(t)}${strike?'':' (볼을 건드렸어요)'}</strong><br>${res}!</div>`;
     return resolveHit(res);
   }
   await flyBall(R, M, 560, 22);
@@ -2040,14 +2046,6 @@ function wheelSegments(t, chase){
   const total=Object.values(w).reduce((a,b)=>a+Math.max(.5,b),0);
   const order=['아웃','안타','파울','2루타','아웃','3루타','안타','홈런'];
   return order.map(name=>({ name, w:Math.max(.5,w[name])/total/order.filter(n=>n===name).length }));
-}
-// 스윙 돌림판: 헛스윙 칸 + 타구 결과 칸
-// 헛스윙 확률: 빨강에서 스윙 70%, 볼에 스윙 45%, 스트라이크에 스윙 0%
-function swingSegments(t, strike){
-  const miss = t<=0 ? .7 : strike ? 0 : .45;
-  const segs = wheelSegments(Math.max(t,0), !strike).map(x=>({ name:x.name, w:x.w*(1-miss) }));
-  if(miss>0) segs.splice(2, 0, { name:'헛스윙', w:miss });
-  return segs;
 }
 function drawWheel(segs){
   const c=$('#wheel'), x=c.getContext('2d'), R=c.width/2;
