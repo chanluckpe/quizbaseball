@@ -300,6 +300,9 @@ body:not(.fb) .only-fb, body.fb .only-claude{display:none}
 .credit .mbtn[aria-pressed="false"] .x{display:inline}
 body:not(.pregame) .credit .mbtn{display:none}
 .intro > .credit .mbtn{background:rgba(255,247,223,.12);border-color:rgba(255,247,223,.4);color:var(--chalk)}
+.log-more{font-family:var(--f-body);font-size:.82em;font-weight:500;color:#9a8f82;margin-left:2px}
+.log-more::after{content:'(펼치기)'}
+details.log[open] .log-more::after{content:'(접기)'}
 /* 제작자 표시 (모든 화면 맨 아래) */
 .credit{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:4px 14px;font-size:12.5px;line-height:1.3;color:var(--ink-soft);text-align:center;
   padding:7px 16px;border-radius:999px;background:rgba(255,250,238,.82);border:2px solid rgba(59,45,32,.18);box-shadow:0 3px 0 rgba(59,45,32,.12);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
@@ -946,7 +949,7 @@ body.solo #phase .side.red .choices.long .choice{min-height:46px;justify-content
         <div class="power"><div class="lbl"><span id="defLbl">수비력</span><b id="defVal">-</b></div><div class="bar"><i id="defBar"></i></div><p>높을수록 스트라이크·수비 성공 확률이 올라가요</p></div>
         <div class="power"><div class="lbl"><span id="offLbl">공격력</span><b id="offVal">-</b></div><div class="bar"><i id="offBar"></i></div><p>높을수록 스윙 판정 범위와 장타 비율이 커져요</p></div>
       </div>
-      <details class="log" id="logBox" open><summary>경기 기록</summary><ol id="log"></ol></details>
+      <details class="log" id="logBox" open><summary>경기 기록 <span class="log-more" aria-hidden="true"></span></summary><ol id="log"></ol></details>
     </aside>
   </main>
 </div>
@@ -3005,7 +3008,7 @@ function startSolo(level, sports){
   const name = ($('#jName').value.trim()||'챈도리').slice(0,8);
   const c=CPU[level];
   if(!sports || !sports.length) sports=['baseball'];
-  launchGame({ innings:3, limit:7, auto:false, online:false, solo:level, sports,
+  launchGame({ innings:3, limit:10, auto:false, online:false, solo:level, sports,
     teams:[ { name, roster:[name], nums:null },
             { name:c.name, roster:['급식봇 1호','급식봇 2호','급식봇 3호','급식봇 4호','급식봇 5호'], nums:null } ] });
   log(`솔로 모드 · ${c.label} 난이도 컴퓨터와 대결해요`);
