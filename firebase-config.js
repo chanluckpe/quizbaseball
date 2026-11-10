@@ -14,10 +14,10 @@
  * };
  */
 window.FIREBASE_CONFIG = {
-  apiKey: "여기에_apiKey",                 // ← 콘솔 값으로 바꿔 주세요
+  apiKey: "AIzaSyCW2nSwJz6A9dcDbcNph3m6EVwaYECFQqE",
   authDomain: "quiz-24495.firebaseapp.com",
   projectId: "quiz-24495",
   storageBucket: "quiz-24495.firebasestorage.app",
-  messagingSenderId: "여기에_messagingSenderId",
-  appId: "여기에_appId"
+  messagingSenderId: "708511736076",
+  appId: "1:708511736076:web:10f11934d203bca0f2a929"
 };
