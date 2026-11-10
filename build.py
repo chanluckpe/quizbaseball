@@ -20,6 +20,13 @@ REPL = {
 }
 for k, v in REPL.items():
     h = h.replace(k, v)
+# 소리: source/audio/ 에 파일이 있으면 넣고, 없으면 그 소리는 건너뛰어요
+def aud(name):
+    f = S('audio', name)
+    return ('data:audio/mpeg;base64,' + base64.b64encode(open(f, 'rb').read()).decode()) if os.path.exists(f) else ''
+h = h.replace('__BGM__', aud('bgm.mp3'))
+for k, f in [('__SFX_START__', 'baseball_start.mp3'), ('__SFX_HOMERUN__', 'baseball_homerun.mp3'), ('__SFX_END__', 'baseball_end.mp3')]:
+    h = h.replace(k, aud(f))
 h = h.replace('__QUIZDATA__', open(S('quiz_data.json'), encoding='utf-8').read())
 
 # claude.ai 아티팩트용 (그대로 붙여 넣는 버전)

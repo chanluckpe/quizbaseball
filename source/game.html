@@ -292,6 +292,15 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.18}}
 
 body:not(.fb) .only-fb, body.fb .only-claude{display:none}
+/* 배경음악 버튼 (경기 전 화면) */
+.music-btn{position:fixed;z-index:60;left:max(12px,env(safe-area-inset-left,0px));top:max(12px,env(safe-area-inset-top,0px));width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
+  background:var(--card);color:var(--ink);border:2.5px solid var(--ink);box-shadow:0 3px 0 var(--ink);cursor:pointer;transition:transform .1s,box-shadow .1s,opacity .4s}
+.music-btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--ink)}
+.music-btn svg{width:22px;height:22px}
+.music-btn .x{display:none}
+.music-btn[aria-pressed="false"]{opacity:.75}
+.music-btn[aria-pressed="false"] .x{display:inline}
+.music-btn.dark{background:rgba(32,23,15,.55);color:var(--chalk);border-color:rgba(255,247,223,.6);box-shadow:none}
 /* 제작자 표시 (모든 화면 맨 아래) */
 .credit{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:4px 14px;font-size:12.5px;line-height:1.3;color:var(--ink-soft);text-align:center;
   padding:7px 16px;border-radius:999px;background:rgba(255,250,238,.82);border:2px solid rgba(59,45,32,.18);box-shadow:0 3px 0 rgba(59,45,32,.12);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
@@ -303,7 +312,7 @@ body:not(.fb) .only-fb, body.fb .only-claude{display:none}
 .credit a:hover{color:var(--ink);background:rgba(59,45,32,.07)}
 .credit a:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
 .credit svg{width:16px;height:16px;flex:none}
-.screen.paper{grid-template-rows:minmax(0,1fr) auto;grid-template-columns:minmax(0,1fr)}
+.screen.paper{grid-template-rows:1fr auto;grid-template-columns:minmax(0,1fr);align-items:safe center}
 .screen.paper > .credit{grid-row:2;align-self:end;margin-top:14px}
 #stuScr.mirror > .credit{display:none}
 .intro > .credit{position:absolute;left:50%;bottom:max(14px,env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:max-content;max-width:calc(100% - 24px);
@@ -942,6 +951,8 @@ body.solo #phase .side.red .choices.long .choice{min-height:46px;justify-content
   </main>
 </div>
 
+<audio id="bgm" src="__BGM__" loop preload="auto"></audio>
+<button class="music-btn" id="musicBtn" type="button" aria-pressed="true" aria-label="배경음악 끄기" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V6l11-2v12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><circle cx="6.5" cy="18" r="2.6" fill="currentColor"/><circle cx="17.5" cy="16" r="2.6" fill="currentColor"/><path class="x" d="M3 3l18 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
 <div class="pre-bg" id="preBg" aria-hidden="true"><img class="scr-bg" id="preBgImg" alt=""><div class="scr-veil"></div></div>
 <section class="screen intro on" id="intro" aria-label="시작 화면">
   <img class="intro-bg" id="introBg" alt="">
@@ -1496,6 +1507,7 @@ function launchGame(cfg){
   startGame();
 }
 function startGame(){
+  setTimeout(bgmSync,0);
   const cfg=S.nextCfg||S.lastCfg; S.nextCfg=null;
   setTeamColors(!!cfg.swap);
   stopTimer(); stopGauge(); $('#wheelWrap').hidden=true;
@@ -1518,7 +1530,7 @@ function startGame(){
   const gid=S.gameId=(S.gameId||0)+1;
   S.phase='intro'; S.busy=true; renderTop(); hideBall();
   clearTimeout(S.introT); clearTimeout(S.introT2);
-  S.introT2=setTimeout(()=>{ if(S.gameId===gid) banner('경기 시작!', `1회 초 · ${T(0).name} 공격`, '#ffe08a', true); },700);
+  S.introT2=setTimeout(()=>{ if(S.gameId===gid){ banner('경기 시작!', `1회 초 · ${T(0).name} 공격`, '#ffe08a', true); sfx('start'); } },700);
   S.introT=setTimeout(()=>{ if(S.gameId!==gid || S.over) return; S.busy=false; newPitch(); },3900);
 }
 $('#newBtn').addEventListener('click', () => S.solo ? openDiff() : go('teachScr'));
@@ -2128,7 +2140,7 @@ async function resolveHit(res){
     beep('cheer');
     const flight=flyBall(CONTACT, land, 1400, 420, true);
     await sleep(500);
-    S.paHit=true; banner('홈런!!', `${who}의 큼지막한 한 방`, '#ffe08a'); log(`${who} 홈런!`,'score');
+    S.paHit=true; sfx('homerun'); banner('홈런!!', `${who}의 큼지막한 한 방`, '#ffe08a'); log(`${who} 홈런!`,'score');
     await Promise.all([flight, advance(4,B)]); hideBall();
     return endPA();
   }
@@ -2234,6 +2246,7 @@ async function switchSides(){
   await sleep(2400); newPitch();
 }
 function gameOver(walkoff){
+  if(!S.mirror) sfx('end');
   S.over=true; S.phase='over'; S.busy=false; stopTimer(); stopGauge(); setStep('');
   if(S.restart){ S.restart=false; return startGame(); }
   if(S.online){ let fin=null; try{ fin=finalData(); }catch(e){} netWrite({status:'over', final:fin}); }
@@ -2305,6 +2318,7 @@ function go(id){
     if(cur){ cur.classList.remove('on'); await sleep(500); cur.hidden=true; }
     if(id){ const n=$('#'+id); n.hidden=false; n.scrollTop=0; await nextFrame(); n.classList.add('on');
       const f=n.querySelector('input:not([type=radio]):not([type=checkbox])'); if(f && matchMedia('(pointer:fine)').matches) setTimeout(()=>f.focus(),520); }
+    bgmSync();
   });
   return goBusy;
 }
@@ -2319,6 +2333,37 @@ const FRAME = k => document.querySelector(`.af[data-f="${k}"]`).src;
 $('#introBg').src = $('#stage > img').src;
 $('#preBgImg').src = $('#stage > img').src;
 document.querySelectorAll('img[data-src]').forEach(im=>im.src=FRAME(im.dataset.src));
+/* ---------- 배경음악 · 효과음 ----------
+   경기 전 화면(시작·역할·입장·경기 구성·대기실)에서만 배경음악이 나오고, 경기가 시작되면 멈춰요.
+   브라우저는 사용자가 한 번 누르기 전에는 소리를 막기 때문에 첫 터치 때 재생을 시작해요. */
+const SFX_SRC = { start:'__SFX_START__', homerun:'__SFX_HOMERUN__', end:'__SFX_END__' };
+const MUSIC = { on:true, unlocked:false, fadeT:null };
+try{ MUSIC.on = localStorage.getItem('qb-music')!=='off'; }catch(e){}
+function preGame(){
+  const cur=document.querySelector('.screen:not([hidden])');
+  if(!cur) return false;
+  if(cur.id==='stuScr') return !ST.mirror && (!ST.game || ST.game.status==='lobby');
+  return ['intro','roleScr','joinScr','teachScr','lobbyScr'].includes(cur.id);
+}
+function bgmFade(to, ms, done){
+  const a=$('#bgm'); clearInterval(MUSIC.fadeT);
+  const from=a.volume, t0=performance.now();
+  MUSIC.fadeT=setInterval(()=>{ const k=Math.min(1,(performance.now()-t0)/ms); a.volume=from+(to-from)*k; if(k>=1){ clearInterval(MUSIC.fadeT); done&&done(); } },40);
+}
+function bgmSync(){
+  const a=$('#bgm'), want=MUSIC.on && MUSIC.unlocked && preGame() && a.getAttribute('src');
+  const btn=$('#musicBtn'); btn.hidden=!preGame();
+  btn.classList.toggle('dark', !!document.querySelector('#intro.on'));
+  btn.setAttribute('aria-pressed', MUSIC.on); btn.setAttribute('aria-label', MUSIC.on?'배경음악 끄기':'배경음악 켜기');
+  if(want){ if(a.paused){ a.volume=0; a.play().then(()=>bgmFade(.55,900)).catch(()=>{}); } else bgmFade(.55,300); }
+  else if(!a.paused) bgmFade(0,700,()=>a.pause());
+}
+function sfx(k){
+  const src=SFX_SRC[k]; if(!src || src.startsWith('__') || !S.sound) return;
+  try{ const a=new Audio(src); a.volume=.85; a.play().catch(()=>{}); }catch(e){}
+}
+['pointerdown','keydown','touchstart'].forEach(ev=>window.addEventListener(ev,()=>{ if(!MUSIC.unlocked){ MUSIC.unlocked=true; bgmSync(); } },{passive:true}));
+$('#musicBtn').addEventListener('click', e=>{ e.stopPropagation(); MUSIC.on=!MUSIC.on; try{ localStorage.setItem('qb-music', MUSIC.on?'on':'off'); }catch(_){} MUSIC.unlocked=true; bgmSync(); });
 const leaveIntro = () => { if($('#intro').classList.contains('on')) go('roleScr'); };
 { const CREDIT=`<footer class="credit"><span class="by">제작: <b>급식대장 챈도리</b></span><nav aria-label="제작자 채널">
     <a href="https://www.youtube.com/@%EA%B8%89%EC%8B%9D%EB%8C%80%EC%9E%A5%EC%B1%88%EB%8F%84%EB%A6%AC" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="4.5" width="21" height="15" rx="4.5" fill="#ff0033"/><path d="M10 8.6v6.8l5.8-3.4z" fill="#fff"/></svg>유튜브</a>
@@ -2977,6 +3022,7 @@ function startSolo(level, sports){
 
 /* ---------- 학생 화면: 경기장 따라 그리기 (선생님 화면과 같은 장면 재생) ---------- */
 function mirrorInit(g){
+  setTimeout(bgmSync,0);
   const inn=g.cfg?.innings||3;
   Object.assign(S,{ mirror:true, online:false, solo:null, over:false, busy:false, phase:'watch', pool:null });
   S.cfg.innings=inn; S.cfg.limit=g.cfg?.limit||20;
@@ -2987,7 +3033,7 @@ function mirrorInit(g){
   const fresh = !g.current && (!sn || (sn.inning===1 && sn.half===0 && sn.outs===0));
   createFielders(def(), fresh);
   applySnap(sn);
-  if(fresh) setTimeout(()=>banner('경기 시작!', `1회 초 · ${T(0).name} 공격`, '#ffe08a', true),500);
+  if(fresh) setTimeout(()=>{ banner('경기 시작!', `1회 초 · ${T(0).name} 공격`, '#ffe08a', true); sfx('start'); },500);
   document.body.classList.remove('solo','pop-on'); $('#preBg').classList.remove('on');
   document.body.classList.add('mirror'); $('#stuScr').classList.add('mirror');
   ST.mirror=true; ST.playing=false; ST.pendingPlay=null; ST.pendingSnap=null; ST.lastPlay=null;
@@ -3138,6 +3184,9 @@ function stuRender(){
   if(!paused && ST.pauseStart){ ST.shownAt += performance.now()-ST.pauseStart; ST.pauseStart=0; }
   $('#stuScr').classList.toggle('paused', paused);
   if(g.status==='playing' || (g.status==='over' && ST.mirror)) mirrorSync(g);
+  if(g.status==='playing') ST.endSfx=false;
+  if(g.status==='over' && !ST.endSfx){ ST.endSfx=true; sfx('end'); }
+  bgmSync();
   const ti=stuTeam(), chip=$('#stuTeam');
   chip.className='chip '+(ti==null?'':TEAMCLS[ti]); chip.textContent = ti==null ? (g.status==='lobby'?'팀 배정 전':'관전 중') : `${g.teams[ti].name}`;
   const n0=esc(g.teams?.[0]?.name||'선공'), n1=esc(g.teams?.[1]?.name||'후공'), sc=g.score||[0,0];
