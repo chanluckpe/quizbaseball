@@ -315,6 +315,7 @@ body:not(.fb) .only-fb, body.fb .only-claude{display:none}
 .screen.paper{grid-template-rows:1fr auto;grid-template-columns:minmax(0,1fr);align-items:safe center}
 .screen.paper > .credit{grid-row:2;align-self:end;margin-top:14px}
 #stuScr.mirror > .credit{display:none}
+.tap{cursor:pointer}
 .intro > .credit{position:absolute;left:50%;bottom:max(14px,env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:max-content;max-width:calc(100% - 24px);
   background:rgba(32,23,15,.6);border-color:rgba(255,247,223,.28);color:rgba(255,247,223,.82);box-shadow:none;animation:tapIn .6s ease 2.8s both}
 .intro > .credit .by{color:var(--chalk)}
@@ -1507,7 +1508,7 @@ function launchGame(cfg){
   startGame();
 }
 function startGame(){
-  setTimeout(bgmSync,0);
+  MUSIC.inGame=true; setTimeout(bgmSync,0);
   const cfg=S.nextCfg||S.lastCfg; S.nextCfg=null;
   setTeamColors(!!cfg.swap);
   stopTimer(); stopGauge(); $('#wheelWrap').hidden=true;
@@ -2318,6 +2319,7 @@ function go(id){
     if(cur){ cur.classList.remove('on'); await sleep(500); cur.hidden=true; }
     if(id){ const n=$('#'+id); n.hidden=false; n.scrollTop=0; await nextFrame(); n.classList.add('on');
       const f=n.querySelector('input:not([type=radio]):not([type=checkbox])'); if(f && matchMedia('(pointer:fine)').matches) setTimeout(()=>f.focus(),520); }
+    if(['intro','roleScr','joinScr','teachScr','lobbyScr'].includes(id)) MUSIC.inGame=false;
     bgmSync();
   });
   return goBusy;
@@ -2341,7 +2343,7 @@ const MUSIC = { on:true, unlocked:false, fadeT:null };
 try{ MUSIC.on = localStorage.getItem('qb-music')!=='off'; }catch(e){}
 function preGame(){
   const cur=document.querySelector('.screen:not([hidden])');
-  if(!cur) return false;
+  if(!cur || MUSIC.inGame) return false;
   if(cur.id==='stuScr') return !ST.mirror && (!ST.game || ST.game.status==='lobby');
   return ['intro','roleScr','joinScr','teachScr','lobbyScr'].includes(cur.id);
 }
@@ -2355,14 +2357,16 @@ function bgmSync(){
   const btn=$('#musicBtn'); btn.hidden=!preGame();
   btn.classList.toggle('dark', !!document.querySelector('#intro.on'));
   btn.setAttribute('aria-pressed', MUSIC.on); btn.setAttribute('aria-label', MUSIC.on?'배경음악 끄기':'배경음악 켜기');
-  if(want){ if(a.paused){ a.volume=0; a.play().then(()=>bgmFade(.55,900)).catch(()=>{}); } else bgmFade(.55,300); }
-  else if(!a.paused) bgmFade(0,700,()=>a.pause());
+  if(want){ if(a.paused){ a.volume=0; a.play().then(()=>{ MUSIC.playing=true; bgmFade(.55,900); }).catch(()=>{ MUSIC.unlocked=false; }); } else bgmFade(.55,300); }
+  else if(!a.paused) bgmFade(0,700,()=>{ a.pause(); MUSIC.playing=false; });
 }
 function sfx(k){
   const src=SFX_SRC[k]; if(!src || src.startsWith('__') || !S.sound) return;
   try{ const a=new Audio(src); a.volume=.85; a.play().catch(()=>{}); }catch(e){}
 }
-['pointerdown','keydown','touchstart'].forEach(ev=>window.addEventListener(ev,()=>{ if(!MUSIC.unlocked){ MUSIC.unlocked=true; bgmSync(); } },{passive:true}));
+['pointerdown','keydown','touchstart'].forEach(ev=>window.addEventListener(ev,()=>{ if(ev!=='touchstart') MUSIC.downPlaying=!!MUSIC.playing; if(!MUSIC.unlocked || $('#bgm').paused){ MUSIC.unlocked=true; bgmSync(); } },{passive:true}));
+// 시작 페이지가 뜨자마자 바로 재생을 시도 (브라우저가 허용하면 바로 나오고, 막히면 첫 터치 때 시작)
+MUSIC.unlocked=true; setTimeout(bgmSync,0);
 $('#musicBtn').addEventListener('click', e=>{ e.stopPropagation(); MUSIC.on=!MUSIC.on; try{ localStorage.setItem('qb-music', MUSIC.on?'on':'off'); }catch(_){} MUSIC.unlocked=true; bgmSync(); });
 const leaveIntro = () => { if($('#intro').classList.contains('on')) go('roleScr'); };
 { const CREDIT=`<footer class="credit"><span class="by">제작: <b>급식대장 챈도리</b></span><nav aria-label="제작자 채널">
@@ -2373,7 +2377,12 @@ const leaveIntro = () => { if($('#intro').classList.contains('on')) go('roleScr'
   document.querySelectorAll('.screen, .app').forEach(el=>el.insertAdjacentHTML('beforeend', CREDIT));
   document.querySelectorAll('.credit a').forEach(a=>a.addEventListener('click', e=>e.stopPropagation()));
 }
-$('#intro').addEventListener('click', leaveIntro);
+// 시작 페이지: 음악이 아직 막혀 있으면 첫 터치는 음악만 켜고, "퀴즈게임 시작하기"를 누르면 바로 넘어가요
+$('#intro').addEventListener('click', e=>{
+  const bgm=$('#bgm');
+  if(e.target.closest('.tap') || !MUSIC.on || !bgm.getAttribute('src') || MUSIC.introTapped || MUSIC.downPlaying) return leaveIntro();
+  MUSIC.introTapped=true;
+});
 $('#introGo').addEventListener('click', e=>{ e.stopPropagation(); leaveIntro(); });
 document.addEventListener('keydown', e=>{ if((e.key==='Enter'||e.code==='Space') && $('#intro').classList.contains('on')){ e.preventDefault(); leaveIntro(); } });
 document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
@@ -3022,7 +3031,7 @@ function startSolo(level, sports){
 
 /* ---------- 학생 화면: 경기장 따라 그리기 (선생님 화면과 같은 장면 재생) ---------- */
 function mirrorInit(g){
-  setTimeout(bgmSync,0);
+  MUSIC.inGame=true; setTimeout(bgmSync,0);
   const inn=g.cfg?.innings||3;
   Object.assign(S,{ mirror:true, online:false, solo:null, over:false, busy:false, phase:'watch', pool:null });
   S.cfg.innings=inn; S.cfg.limit=g.cfg?.limit||20;
