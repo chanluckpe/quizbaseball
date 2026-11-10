@@ -1,0 +1,6 @@
+artifact.html
+.firebase/
+.firebaserc
+node_modules/
+__pycache__/
+.DS_Store

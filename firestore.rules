@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 경기방: games/{4자리 코드}
+    match /games/{code} {
+      allow read: if request.auth != null;
+      // 방 만들기
+      allow create: if request.auth != null
+        && code.matches('^[0-9]{4}$')
+        && request.resource.data.host == request.auth.uid;
+      // 경기 진행은 방을 만든 선생님만. 끝났거나 6시간 지난 방은 다른 선생님이 다시 쓸 수 있어요
+      allow update: if request.auth != null && (
+           resource.data.host == request.auth.uid
+        || resource.data.status == 'over'
+        || request.time.toMillis() - resource.data.createdAt > 6 * 60 * 60 * 1000);
+      allow delete: if false;
+
+      // 학생 입장, 답안, 던지기·스윙 기록
+      match /players/{num} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && num.size() <= 12;
+      }
+      match /answers/{id} {
+        allow read: if request.auth != null;
+        allow create, update: if request.auth != null;
+      }
+      match /actions/{id} {
+        allow read: if request.auth != null;
+        allow create, update: if request.auth != null;
+      }
+    }
+
+    // 추가 문제 은행(선택): 읽기만 허용, 등록은 콘솔에서
+    match /quizbanks/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}
