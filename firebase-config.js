@@ -13,4 +13,11 @@
  *   appId: "1:1234567890:web:abcdef"
  * };
  */
-window.FIREBASE_CONFIG = null;
+window.FIREBASE_CONFIG = {
+  apiKey: "여기에_apiKey",                 // ← 콘솔 값으로 바꿔 주세요
+  authDomain: "quiz-24495.firebaseapp.com",
+  projectId: "quiz-24495",
+  storageBucket: "quiz-24495.firebasestorage.app",
+  messagingSenderId: "여기에_messagingSenderId",
+  appId: "여기에_appId"
+};
