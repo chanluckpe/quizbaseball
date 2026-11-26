@@ -314,6 +314,12 @@ body:not(.pregame) .credit .mbtn{display:none}
 .log-more{font-family:var(--f-body);font-size:.82em;font-weight:500;color:#9a8f82;margin-left:2px}
 .log-more::after{content:'(펼치기)'}
 details.log[open] .log-more::after{content:'(접기)'}
+/* 경기 중간 종료 */
+.end-btn{color:var(--red);border-color:var(--red)}
+.end-panel{max-width:460px}
+.end-desc{margin:0;color:var(--ink-soft);line-height:1.5}
+.end-btns{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:6px}
+.end-btns .big{width:auto;padding-left:22px;padding-right:22px}
 /* 제작자 표시 (모든 화면 맨 아래) */
 .credit{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:4px 14px;font-size:12.5px;line-height:1.3;color:var(--ink-soft);text-align:center;
   padding:7px 16px;border-radius:999px;background:rgba(255,250,238,.82);border:2px solid rgba(59,45,32,.18);box-shadow:0 3px 0 rgba(59,45,32,.12);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
@@ -890,6 +896,7 @@ body.solo #phase .side.red .choices.long .choice{min-height:46px;justify-content
     </div>
     <div class="tools">
       <button class="ghost" id="soundBtn" type="button" aria-pressed="true">소리 켜짐</button>
+      <button class="ghost end-btn" id="endBtn" type="button" hidden>경기 종료</button>
       <button class="ghost" id="newBtn" type="button">새 경기</button>
     </div>
   </header>
@@ -1096,6 +1103,15 @@ body.solo #phase .side.red .choices.long .choice{min-height:46px;justify-content
     <header class="help-top"><div><p class="help-kicker">경기 결과</p><h2 id="repTitle">문제 풀이 결과</h2></div><button type="button" class="help-x" data-rclose aria-label="결과 닫기">✕</button></header>
     <div class="help-body" id="repBody"></div>
     <footer class="help-foot"><p id="repNote">정답률은 이 경기에 나온 전체 문제 수를 기준으로 계산해요</p><div class="row-btns"><button type="button" class="soft" data-rclose>닫기</button><button type="button" class="help-go" id="pdfBtn">PDF로 받기</button></div></footer>
+  </div>
+</div>
+<div class="help diff" id="endAsk" hidden role="dialog" aria-modal="true" aria-labelledby="endTitle">
+  <div class="help-scrim" data-eclose></div>
+  <div class="diff-panel end-panel">
+    <p class="help-kicker">경기 종료</p>
+    <h2 id="endTitle">경기를 지금 끝낼까요?</h2>
+    <p class="end-desc" id="endDesc">지금 점수로 승패를 정하고, 지금까지 푼 문제로 결과지를 만들어요.</p>
+    <div class="end-btns"><button type="button" class="soft" data-eclose>계속하기</button><button type="button" class="big red" id="endGo">경기 끝내기</button></div>
   </div>
 </div>
 <div class="solo-dim" id="soloDim" aria-hidden="true"></div>
@@ -1529,11 +1545,11 @@ function startGame(){
     bat:0, pit:0, runs:Array(S.cfg.innings).fill(null) }));
   S.pool=buildPool(cfg.sports); S.records=[]; S.stat={}; S.acc=[{sum:0,n:0},{sum:0,n:0}]; S.inst={}; S.paHit=false; S.paWalk=false; S.peek=false; S.meta={ start:new Date(), sports:cfg.sports||[] }; NET.rec=null;
   NET.boardKey='';
-  { const od=$('#oddsOv');   // 관중 모드면 명단 아래, 나머지는 경기장 위
-    if(S.online){ od.classList.add('static'); $('.leftcol').appendChild(od); }
-    else { od.classList.remove('static'); $('#stage').insertBefore(od, $('#banner')); } }
+  { const od=$('#oddsOv');   // 확률 카드는 모든 모드에서 경기장 안 하단
+    od.classList.remove('static'); $('#stage').insertBefore(od, $('#banner')); }
   if(S.online) netStartGame();
-  Object.assign(S,{inning:1,half:0,outs:0,balls:0,strikes:0,over:false,busy:false,restart:false});
+  Object.assign(S,{inning:1,half:0,outs:0,balls:0,strikes:0,over:false,busy:false,restart:false,endedEarly:false,endedDone:false});
+  $('#endBtn').hidden=false;
   clearActors(); hideBall();
   createFielders(def(), true);
   $('#log').innerHTML='';
@@ -1547,6 +1563,32 @@ function startGame(){
   S.introT=setTimeout(()=>{ if(S.gameId!==gid || S.over) return; S.busy=false; newPitch(); },3900);
 }
 $('#newBtn').addEventListener('click', () => S.solo ? openDiff() : go('teachScr'));
+// 경기 중간에 끝내기: 확인 창 → 지금 점수로 종료, 결과지는 지금까지 푼 문제로
+{ const box=$('#endAsk'), close=()=>{ box.classList.remove('on'); setTimeout(()=>{ if(!box.classList.contains('on')) box.hidden=true; },300); };
+  $('#endBtn').addEventListener('click', ()=>{
+    if(S.over || S.mirror) return;
+    $('#endDesc').textContent = S.online
+      ? '지금 점수로 승패를 정하고, 지금까지 푼 문제로 결과지를 만들어요. 학생 기기에도 경기 종료가 표시돼요.'
+      : '지금 점수로 승패를 정하고 경기를 마쳐요.';
+    box.hidden=false; void box.offsetWidth; box.classList.add('on'); $('#endGo').focus(); });
+  box.querySelectorAll('[data-eclose]').forEach(b=>b.addEventListener('click', close));
+  $('#endGo').addEventListener('click', ()=>{ close(); endEarly(); });
+}
+function endEarly(){
+  if(S.over || S.mirror) return;
+  // 진행 중인 타이머와 화면을 모두 멈춤
+  [S.autoT,S.cpuT,S.introT,S.introT2,S.popT].forEach(t=>clearTimeout(t));
+  clearInterval(S.gT); clearInterval(S.actT);
+  if(S.paused) setPaused(false);
+  S.pauseQueued=false; S.restart=false;
+  // 아직 마감되지 않은 문제는 결과지에서 뺌
+  if(S.online && S.phase==='quiz' && NET.rec && S.records[S.records.length-1]===NET.rec) S.records.pop();
+  $('#wheelWrap').hidden=true; hideOdds();
+  { const a=$('#action'); if(a) a.hidden=true; }
+  S.endedEarly=true;
+  log(`선생님이 ${S.inning}회 ${S.half?'말':'초'}에 경기를 끝냈어요`);
+  gameOver(false);
+}
 $('#soundBtn').addEventListener('click', e => { S.sound=!S.sound; e.currentTarget.textContent = S.sound?'소리 켜짐':'소리 꺼짐'; e.currentTarget.setAttribute('aria-pressed',S.sound); });
 
 /* ---------- 상단 표시 ---------- */
@@ -2219,7 +2261,7 @@ async function walk(){
   await Promise.all(moves); await score(scored);
 }
 async function score(list){
-  if(!list.length) return;
+  if(!list.length || S.over) return;
   const t=T(off()); t.runs[S.inning-1]=(t.runs[S.inning-1]||0)+list.length;
   { const pn=repNum('def'); if(pn!=null) stOf(pn).runs+=list.length; }
   floatText([RUN_PTS[0][0],RUN_PTS[0][1]-90], `+${list.length}점`, TEAMCOLOR[off()]); beep('cheer');
@@ -2233,12 +2275,14 @@ async function strikeOut(msg){
   return outAndEnd(msg);
 }
 async function outAndEnd(msg){
+  if(S.over) return;
   S.outs++; { const pn=repNum('def'); if(pn!=null) stOf(pn).outs++; }
   log(`${batter()} ${msg} (${S.outs}아웃)`); renderTop();
   await sleep(1200); endPA();
 }
 const total = i => T(i).runs.reduce((a,b)=>a+(b||0),0);
 async function endPA(){
+  if(S.over) return;
   hideBall();
   { const bn=repNum('off'), pn=repNum('def');
     if(bn!=null){ const x=stOf(bn); x.pa++; if(!S.paWalk) x.ab++; if(S.paHit) x.h++; }
@@ -2270,6 +2314,9 @@ async function switchSides(){
   await sleep(2400); newPitch();
 }
 function gameOver(walkoff){
+  if(S.over && S.endedDone) return;
+  S.endedDone=true; $('#endBtn').hidden=true;
+  const early=!!S.endedEarly;
   if(!S.mirror) playSfx('end');
   S.over=true; S.phase='over'; S.busy=false; stopTimer(); stopGauge(); setStep('');
   if(S.restart){ S.restart=false; return startGame(); }
@@ -2278,9 +2325,9 @@ function gameOver(walkoff){
   const a=total(0), b=total(1), win = a===b ? null : (a>b?0:1);
   renderTop(); beep('cheer');
   actors.forEach(x=>{ if(win!==null && x.color===TEAMCOLOR[win]) x.pose='cheer'; else if(win!==null) x.pose='idle'; });
-  banner(win===null?'무승부!':`${T(win).name} 승리!`, `${a} : ${b}${walkoff?' · 끝내기':''}`, win===null?'#fff7df':TEAMLIGHT[win]);
+  banner(win===null?'무승부!':`${T(win).name} 승리!`, `${a} : ${b}${walkoff?' · 끝내기':''}${early?' · 중간 종료':''}`, win===null?'#fff7df':TEAMLIGHT[win]);
   log(win===null?`경기 종료 · ${a}:${b} 무승부`:`경기 종료 · ${T(win).name} ${Math.max(a,b)}:${Math.min(a,b)} 승리`,'score');
-  $('#phase').innerHTML=`<div class="callout"><strong>${win===null?'무승부':esc(T(win).name)+' 승리!'}</strong><br>${esc(T(0).name)} ${a} : ${b} ${esc(T(1).name)}${walkoff?' (끝내기)':''}</div>
+  $('#phase').innerHTML=`<div class="callout"><strong>${win===null?'무승부':esc(T(win).name)+' 승리!'}</strong><br>${esc(T(0).name)} ${a} : ${b} ${esc(T(1).name)}${walkoff?' (끝내기)':''}${early?` (${S.inning}회 ${S.half?'말':'초'} 중간 종료)`:''}</div>
     ${S.online?'<button class="big blue" type="button" data-act="report">📊 문제 풀이 결과 보기</button>':''}
     <div class="row"><button class="big" type="button" data-act="again">${S.solo?'같은 난이도로 다시':'같은 팀으로 다시'}</button><button class="soft" type="button" data-act="${S.solo?'diff':'setup'}">${S.solo?'난이도 바꾸기':'팀 다시 정하기'}</button></div>`;
   if(S.solo){ popOff(); S.popT=setTimeout(()=>{ if(S.over) document.body.classList.add('pop-on'); },2600); }
@@ -2749,7 +2796,8 @@ function choiceRows(){
   const rec=NET.rec, counts=S.q.choices.map(()=>0); let n=0;
   if(rec) Object.values(rec.resp).forEach(r=>{ counts[r.i]++; n++; });
   const show = S.peek || S.phase!=='quiz';
-  return S.q.choices.map((c,i)=>`<div class="tch ${show&&i===S.q.answer?'right':''}"><i style="width:${n?counts[i]/n*100:0}%"></i><b>${'①②③④⑤⑥'[i]}</b><span>${esc(c)}${show&&i===S.q.answer?'<span class="ok-tag">정답</span>':''}</span><em>${counts[i]}명</em></div>`).join('');
+  // 경기 중에는 보기별로 몇 명이 골랐는지 보여 주지 않아요 (결과지에서만 확인)
+  return S.q.choices.map((c,i)=>`<div class="tch ${show&&i===S.q.answer?'right':''}"><b>${'①②③④⑤⑥'[i]}</b><span>${esc(c)}${show&&i===S.q.answer?'<span class="ok-tag">정답</span>':''}</span></div>`).join('');
 }
 function repBox(k){
   const ti=k==='def'?def():off(), a=S.ans[k], who=k==='def'?`투수 ${pitcher()}`:`타자 ${batter()}`;
@@ -2896,7 +2944,7 @@ function reportHTML(){
   const names = l => l.slice(0,4).map(x=>esc(x.name)).join(', ')+(l.length>4?` 외 ${l.length-4}명`:'');
   return `
     <div class="rep-meta"><span>경기 일시 <b>${dateTxt}</b></span><span>경기코드 <b>${esc(NET.code||'-')}</b></span><span>종목 <b>${esc((S.meta?.sports||[]).map(sportName).join(', ')||'-')}</b></span>
-      <span>최종 점수 <b>${esc(S.teams[0].name)} ${a} : ${b} ${esc(S.teams[1].name)}</b></span><span>출제 문제 <b>${nQ}개</b></span><span>참여 학생 <b>${students.length}명</b></span><span>전체 정답률 <b>${pctTxt(allRate)}</b></span></div>
+      <span>최종 점수 <b>${esc(S.teams[0].name)} ${a} : ${b} ${esc(S.teams[1].name)}${S.endedEarly?` (${S.inning}회 ${S.half?'말':'초'} 중간 종료)`:''}</b></span><span>출제 문제 <b>${nQ}개</b></span><span>참여 학생 <b>${students.length}명</b></span><span>전체 정답률 <b>${pctTxt(allRate)}</b></span></div>
     <div class="rep-cards">
       <div class="rc good"><span>정답률이 가장 높은 학생</span><b>${tops.length?names(tops):'-'}</b><small>${tops.length?`정답률 ${pctTxt(topRate)} · ${tops[0].c} / ${nQ}문제`:''}</small></div>
       <div class="rc bad"><span>가장 많이 틀린 학생 (미응답 포함)</span><b>${worst.length?names(worst):'-'}</b><small>${worst.length?`${maxMiss}문제 틀림 · 오답 ${worst[0].w} · 미응답 ${worst[0].none}`:''}</small></div>
